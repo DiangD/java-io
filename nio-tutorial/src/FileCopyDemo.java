@@ -1,5 +1,4 @@
 import java.io.*;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
@@ -12,6 +11,8 @@ import java.nio.channels.FileChannel;
  **/
 public class FileCopyDemo {
 
+    private static final int ROUNDS = 5;
+
     public static void close(Closeable closeable) {
         if (closeable != null) {
             try {
@@ -22,7 +23,25 @@ public class FileCopyDemo {
         }
     }
 
+    /**
+     * @param fileCopyRunner fileCopyRunner
+     * @param source         源文件
+     * @param target         目标文件
+     *                       测试函数
+     */
+    public static void benchMark(FileCopyRunner fileCopyRunner, File source, File target) {
+        long elapsed = 0L;
+        for (int i = 0; i < 5; i++) {
+            long startTime = System.currentTimeMillis();
+            fileCopyRunner.copyFile(source, target);
+            elapsed += System.currentTimeMillis() - startTime;
+            target.delete();
+        }
+        System.out.println(fileCopyRunner + ":" + elapsed / ROUNDS);
+    }
+
     public static void main(String[] args) {
+        //纯字节复制
         FileCopyRunner noBufferedStreamCopy = (source, target) -> {
             InputStream in = null;
             OutputStream out = null;
@@ -39,7 +58,9 @@ public class FileCopyDemo {
                 close(in);
                 close(out);
             }
+
         };
+        //缓冲区复制
         FileCopyRunner bufferedStreamCopy = (source, target) -> {
             InputStream in = null;
             OutputStream out = null;
@@ -57,7 +78,9 @@ public class FileCopyDemo {
                 close(in);
                 close(out);
             }
+
         };
+        //nio buffer复制
         FileCopyRunner nioStreamCopy = (source, target) -> {
             FileChannel in = null;
             FileChannel out = null;
@@ -85,6 +108,7 @@ public class FileCopyDemo {
                 close(out);
             }
         };
+        //nio channel之间复制
         FileCopyRunner nioTransferStreamCopy = (resource, target) -> {
             FileChannel in = null;
             FileChannel out = null;
@@ -105,6 +129,12 @@ public class FileCopyDemo {
             }
 
         };
+
+        System.out.println("============test copy file=============");
+        benchMark(noBufferedStreamCopy, new File("/"), new File("/"));
+        benchMark(bufferedStreamCopy, new File("/"), new File("/"));
+        benchMark(nioStreamCopy, new File("/"), new File("/"));
+        benchMark(nioTransferStreamCopy, new File("/"), new File("/"));
 
     }
 }
