@@ -120,6 +120,7 @@ public class FileCopyDemo {
                 while (transferred != size) {
                     //不能保证数据完全转移
                     transferred += in.transferTo(0, size, out);
+                    //transferred += out.transferFrom(in, 0, size);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
