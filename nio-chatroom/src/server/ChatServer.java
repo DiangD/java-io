@@ -1,39 +1,36 @@
+package server;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
-public class ChatSever {
-    private ServerSocketChannel server;
+public class ChatServer {
     private static final int DEFAULT_PORT = 8080;
+    private static final String QUIT = "quit";
     private Selector selector;
     private final int port;
     private static final int BUFFER_SIZE = 1024;
 
-    private final Charset CHARSET = StandardCharsets.UTF_8;
-    private final ByteBuffer rbuffer = ByteBuffer.allocate(BUFFER_SIZE);
+    private final Charset charset = StandardCharsets.UTF_8;
+    private final ByteBuffer rBuffer = ByteBuffer.allocate(BUFFER_SIZE);
     private final ByteBuffer wBuffer = ByteBuffer.allocate(BUFFER_SIZE);
 
-    public ChatSever() {
+    public ChatServer() {
         this(DEFAULT_PORT);
     }
 
-    public ChatSever(int port) {
+    public ChatServer(int port) {
         this.port = port;
     }
 
     private void start() {
         try {
-            server = ServerSocketChannel.open().bind(new InetSocketAddress(DEFAULT_PORT));
+            ServerSocketChannel server = ServerSocketChannel.open().bind(new InetSocketAddress(DEFAULT_PORT));
             selector = Selector.open();
             // 非阻塞
             server.configureBlocking(false);
@@ -66,15 +63,43 @@ public class ChatSever {
 
     private void handleReadable(SelectionKey key) throws IOException {
         SocketChannel client = (SocketChannel) key.channel();
-        receive(client);
+        String fwdMsg = receive(client);
+        if (fwdMsg.isEmpty()) {
+            key.cancel();
+            selector.wakeup();
+        } else {
+            System.out.println(getClientName(client) + ":" + fwdMsg);
+            forwardMessage(client, fwdMsg);
+            if (readyToQuit(fwdMsg)) {
+                key.cancel();
+                selector.wakeup();
+                System.out.println(getClientName(client) + "已断开");
+            }
+        }
+    }
+
+    private void forwardMessage(SocketChannel client, String fwdMsg) throws IOException {
+        for (SelectionKey key : selector.keys()) {
+            Channel connect = key.channel();
+            if (connect instanceof ServerSocketChannel) {
+                continue;
+            }
+            if (key.isValid() && !client.equals(connect)) {
+                wBuffer.clear();
+                wBuffer.put(charset.encode(getClientName(client) + ":" + fwdMsg));
+                wBuffer.flip();
+                while (wBuffer.hasRemaining()) {
+                    ((SocketChannel) connect).write(wBuffer);
+                }
+            }
+        }
     }
 
     private String receive(SocketChannel client) throws IOException {
-        rbuffer.clear();
-        while (client.read(rbuffer) > 0) {
-        }
-        rbuffer.flip();
-        return String.valueOf(CHARSET.decode(rbuffer));
+        rBuffer.clear();
+        while (client.read(rBuffer) > 0) ;
+        rBuffer.flip();
+        return String.valueOf(charset.decode(rBuffer));
     }
 
     private void handleAcceptable(SelectionKey key) throws IOException {
@@ -87,6 +112,10 @@ public class ChatSever {
 
     private String getClientName(SocketChannel client) {
         return "客户端【" + client.socket().getPort() + "】";
+    }
+
+    private boolean readyToQuit(String msg) {
+        return QUIT.equals(msg);
     }
 
     private void close(Closeable closeable) {
@@ -102,6 +131,6 @@ public class ChatSever {
     }
 
     public static void main(String[] args) {
-        new ChatSever(DEFAULT_PORT).start();
+        new ChatServer(DEFAULT_PORT).start();
     }
 }
